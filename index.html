@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gino's Gaming Hub</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="logo">Gino's Gaming Hub</div>
+    <nav class="nav">
+      <a href="#games">Games</a>
+      <a href="#news">News</a>
+      <a href="#about">About</a>
+      <a href="#contact">Contact</a>
+    </nav>
+  </header>
+
+  <main>
+    <!-- Hero section -->
+    <section class="hero">
+      <div class="hero-content">
+        <h1>Welcome to Gino's Gaming Hub</h1>
+        <p>Your place for game experiments, prototypes, and random fun builds.</p>
+        <button id="randomGameBtn" class="btn-primary">Pick a Random Game</button>
+      </div>
+    </section>
+
+    <!-- Games section -->
+    <section id="games" class="section">
+      <h2>Games</h2>
+      <div class="games-grid" id="gamesGrid">
+        <!-- Example game card -->
+        <article class="game-card" data-genre="puzzle">
+          <h3>Block Shift</h3>
+          <p>A simple puzzle prototype about sliding blocks into place.</p>
+          <span class="tag">Puzzle</span>
+          <a href="#" class="btn-secondary">Play (soon)</a>
+        </article>
+
+        <article class="game-card" data-genre="arcade">
+          <h3>Pixel Runner</h3>
+          <p>Endless runner with increasing difficulty and tight jumps.</p>
+          <span class="tag">Arcade</span>
+          <a href="#" class="btn-secondary">Play (soon)</a>
+        </article>
+
+        <article class="game-card" data-genre="strategy">
+          <h3>Node Commander</h3>
+          <p>Lightweight strategy concept about capturing nodes on a grid.</p>
+          <span class="tag">Strategy</span>
+          <a href="#" class="btn-secondary">Play (soon)</a>
+        </article>
+      </div>
+    </section>
+
+    <!-- News / updates section -->
+    <section id="news" class="section section-alt">
+      <h2>Dev Log & Updates</h2>
+      <div class="news-list">
+        <article class="news-item">
+          <h3>Initial Launch</h3>
+          <time datetime="2026-03-29">March 29, 2026</time>
+          <p>Site skeleton is live. Games will be added as prototypes are ready.</p>
+        </article>
+        <article class="news-item">
+          <h3>Planned Features</h3>
+          <time datetime="2026-04-05">Coming soon</time>
+          <p>Leaderboards, small browser games, and a dedicated section for security-themed puzzles.</p>
+        </article>
+      </div>
+    </section>
+
+    <!-- About section -->
+    <section id="about" class="section">
+      <h2>About</h2>
+      <p>
+        This site is a playground for experiments in game design, mechanics, and
+        sometimes security-inspired puzzles. Everything here is a work in progress,
+        so expect broken things, weird ideas, and frequent changes.
+      </p>
+    </section>
+
+    <!-- Contact section -->
+    <section id="contact" class="section section-alt">
+      <h2>Contact</h2>
+      <p>
+        Want to suggest a mechanic, report a bug, or just say hi?
+      </p>
+      <ul class="contact-list">
+        <li><strong>GitHub:</strong> <a href="https://github.com/ginozizza116-cyber" target="_blank">ginozizza116-cyber</a></li>
+        <li><strong>Email:</strong> <a href="mailto:you@example.com">you@example.com</a></li>
+      </ul>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>© <span id="year"></span> Gino's Gaming Hub. Built with HTML, CSS, and JS.</p>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
