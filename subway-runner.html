@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Subway Surfers Style Runner</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #020617;
+    color: #e5e7eb;
+    font-family: system-ui, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 1rem;
+  }
+  h1 { margin-bottom: 0.25rem; font-size: 1.6rem; }
+  .subtitle { color: #9ca3af; margin-bottom: 0.75rem; }
+
+  #gameContainer {
+    width: 360px;
+    height: 480px;
+    background: linear-gradient(#1e3a8a, #0f172a);
+    border-radius: 12px;
+    overflow: hidden;
+    position: relative;
+    border: 2px solid #1f2937;
+    box-shadow: 0 18px 40px rgba(15,23,42,0.9);
+  }
+
+  canvas { width: 100%; height: 100%; }
+
+  #overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(15,23,42,0.85);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+  }
+
+  #overlay button {
+    padding: 0.5rem 1.2rem;
+    border-radius: 999px;
+    border: none;
+    background: #38bdf8;
+    color: #020617;
+    font-weight: bold;
+    cursor: pointer;
+  }
+
+  .hud {
+    margin-top: 0.5rem;
+    display: flex;
+    gap: 1rem;
+  }
+</style>
+</head>
+<body>
+
+<h1>Subway Surfers Style</h1>
+<div class="subtitle">Swipe / Arrow Keys to switch lanes. Avoid obstacles.</div>
+
+<div id="gameContainer">
+  <canvas id="gameCanvas" width="360" height="480"></canvas>
+
+  <div id="overlay">
+    <h2>Subway Runner</h2>
+    <p>Left / Right to switch lanes. Jump with UP.</p>
+    <button id="startBtn">Start</button>
+  </div>
+</div>
+
+<div class="hud">
+  <div>Score: <span id="score">0</span></div>
+  <div>Best: <span id="best">0</span></div>
+</div>
+
+<script>
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+const overlay = document.getElementById("overlay");
+const startBtn = document.getElementById("startBtn");
+const scoreEl = document.getElementById("score");
+const bestEl = document.getElementById("best");
+
+const W = canvas.width;
+const H = canvas.height;
+
+let lanes = [W*0.2, W*0.5, W*0.8];
+let player, obstacles, score, best, running, lastTime;
+
+best = parseInt(localStorage.getItem("subway_best") || "0", 10);
+bestEl.textContent = best;
+
+class Player {
+  constructor() {
+    this.lane = 1;
+    this.x = lanes[this.lane];
+    this.y = H - 80;
+    this.size = 30;
+    this.vy = 0;
+    this.jumpPower = -10;
+    this.gravity = 0.5;
+    this.onGround = true;
+  }
+  reset() {
+    this.lane = 1;
+    this.x = lanes[this.lane];
+    this.y = H - 80;
+    this.vy = 0;
+    this.onGround = true;
+  }
+  moveLeft() {
+    if (this.lane > 0) this.lane--;
+  }
+  moveRight() {
+    if (this.lane < 2) this.lane++;
+  }
+  jump() {
+    if (this.onGround) {
+      this.vy = this.jumpPower;
+      this.onGround = false;
+    }
+  }
+  update(dt) {
+    this.x += (lanes[this.lane] - this.x) * 0.2;
+
+    this.vy += this.gravity * (dt / 16.67);
+    this.y += this.vy * (dt / 16.67);
+
+    if (this.y >= H - 80) {
+      this.y = H - 80;
+      this.vy = 0;
+      this.onGround = true;
+    }
+  }
+  draw() {
+    ctx.fillStyle = "#facc15";
+    ctx.fillRect(this.x - this.size/2, this.y - this.size/2, this.size, this.size);
+  }
+  bounds() {
+    return {
+      x: this.x - this.size/2,
+      y: this.y - this.size/2,
+      w: this.size,
+      h: this.size
+    };
+  }
+}
+
+class Obstacle {
+  constructor(lane) {
+    this.lane = lane;
+    this.x = lanes[lane];
+    this.y = -40;
+    this.size = 40;
+    this.speed = 4;
+  }
+  update(dt) {
+    this.y += this.speed * (dt / 16.67);
+  }
+  offscreen() {
+    return this.y > H + 50;
+  }
+  draw() {
+    ctx.fillStyle = "#ef4444";
+    ctx.fillRect(this.x - this.size/2, this.y - this.size/2, this.size, this.size);
+  }
+  collides(b) {
+    return !(
+      b.x + b.w < this.x - this.size/2 ||
+      b.x > this.x + this.size/2 ||
+      b.y + b.h < this.y - this.size/2 ||
+      b.y > this.y + this.size/2
+    );
+  }
+}
+
+function resetGame() {
+  player = new Player();
+  obstacles = [];
+  score = 0;
+  scoreEl.textContent = score;
+  lastTime = performance.now();
+}
+
+function spawnObstacle() {
+  if (Math.random() < 0.03) {
+    obstacles.push(new Obstacle(Math.floor(Math.random()*3)));
+  }
+}
+
+function update(dt) {
+  player.update(dt);
+  obstacles.forEach(o => o.update(dt));
+  obstacles = obstacles.filter(o => !o.offscreen());
+
+  spawnObstacle();
+
+  const b = player.bounds();
+  for (const o of obstacles) {
+    if (o.collides(b)) {
+      gameOver();
+      return;
+    }
+  }
+
+  score += dt * 0.01;
+  scoreEl.textContent = Math.floor(score);
+
+  if (score > best) {
+    best = Math.floor(score);
+    bestEl.textContent = best;
+    localStorage.setItem("subway_best", best);
+  }
+}
+
+function draw() {
+  ctx.fillStyle = "#1e293b";
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.fillStyle = "#334155";
+  ctx.fillRect(W/3 - 10, 0, 20, H);
+  ctx.fillRect(2*W/3 - 10, 0, 20, H);
+
+  obstacles.forEach(o => o.draw());
+  player.draw();
+}
+
+function loop(t) {
+  if (!running) return;
+  const dt = t - lastTime;
+  lastTime = t;
+  update(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+
+function startGame() {
+  overlay.style.display = "none";
+  running = true;
+  resetGame();
+  requestAnimationFrame(loop);
+}
+
+function gameOver() {
+  running = false;
+  overlay.style.display = "flex";
+  overlay.querySelector("h2").textContent = "Game Over";
+  overlay.querySelector("p").textContent = `Score: ${Math.floor(score)} | Best: ${best}`;
+  startBtn.textContent = "Play Again";
+}
+
+window.addEventListener("keydown", e => {
+  if (e.code === "ArrowLeft") player.moveLeft();
+  if (e.code === "ArrowRight") player.moveRight();
+  if (e.code === "ArrowUp") player.jump();
+  if (e.code === "Space" && !running) startGame();
+});
+
+canvas.addEventListener("pointerdown", () => {
+  if (!running) startGame();
+  else player.jump();
+});
+
+startBtn.addEventListener("click", startGame);
+</script>
+</body>
+</html>
