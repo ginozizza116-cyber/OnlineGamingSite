@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Crossy Road Style</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      background: #020617;
+      color: #e5e7eb;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 1rem;
+    }
+    h1 {
+      margin-bottom: 0.25rem;
+      font-size: 1.6rem;
+    }
+    .subtitle {
+      font-size: 0.9rem;
+      color: #9ca3af;
+      margin-bottom: 0.75rem;
+      text-align: center;
+    }
+    #gameContainer {
+      position: relative;
+      width: 360px;
+      height: 480px;
+      background: #0b1120;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 2px solid #1f2937;
+      box-shadow: 0 18px 40px rgba(15, 23, 42, 0.9);
+      touch-action: none;
+    }
+    #gameCanvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(#16a34a 0 25%, #0f172a 25% 100%);
+    }
+    .hud {
+      margin-top: 0.5rem;
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+      font-size: 0.9rem;
+    }
+    .btn {
+      padding: 0.35rem 0.9rem;
+      border-radius: 999px;
+      border: 1px solid #38bdf8;
+      background: transparent;
+      color: #38bdf8;
+      font-size: 0.8rem;
+      cursor: pointer;
+    }
+    .btn:hover {
+      background: rgba(56, 189, 248, 0.15);
+    }
+    #overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.9);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: #e5e7eb;
+      text-align: center;
+      padding: 1rem;
+    }
+    #overlay h2 {
+      margin-bottom: 0.5rem;
+    }
+    #overlay p {
+      font-size: 0.9rem;
+      color: #9ca3af;
+      margin-bottom: 0.75rem;
+    }
+    #overlay button {
+      padding: 0.45rem 1.2rem;
+      border-radius: 999px;
+      border: none;
+      background: #38bdf8;
+      color: #020617;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    #overlay button:hover {
+      filter: brightness(1.1);
+    }
+    @media (max-width: 420px) {
+      #gameContainer {
+        width: 100%;
+        max-width: 360px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <h1>Crossy Road Style</h1>
+  <div class="subtitle">Use arrow keys or WASD to move. Don’t get hit. Go as far as you can.</div>
+
+  <div id="gameContainer">
+    <canvas id="gameCanvas" width="360" height="480"></canvas>
+    <div id="overlay">
+      <h2>Crossy Road Style</h2>
+      <p>Move the chicken up the lanes, dodge cars, and see how far you can go.</p>
+      <p>Controls: Arrow keys or WASD</p>
+      <button id="startBtn">Start</button>
+    </div>
+  </div>
+
+  <div class="hud">
+    <div>Score: <span id="score">0</span></div>
+    <div>Best: <span id="best">0</span></div>
+    <button class="btn" id="restartBtn">Restart</button>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+    const overlay = document.getElementById("overlay");
+    const startBtn = document.getElementById("startBtn");
+    const restartBtn = document.getElementById("restartBtn");
+    const scoreEl = document.getElementById("score");
+    const bestEl = document.getElementById("best");
+
+    const W = canvas.width;
+    const H = canvas.height;
+
+    const laneHeight = 60;
+    const numLanes = Math.floor(H / laneHeight);
+    const safeLaneIndexes = [0, 3, 6]; // grass lanes
+
+    let keys = {};
+    let player;
+    let cars = [];
+    let score = 0;
+    let best = parseInt(localStorage.getItem("crossy_best") || "0", 10);
+    bestEl.textContent = best;
+    let running = false;
+    let lastTime = 0;
+
+    class Player {
+      constructor() {
+        this.reset();
+      }
+      reset() {
+        this.x = W / 2 - 10;
+        this.y = H - laneHeight + 10;
+        this.size = 20;
+        this.color = "#facc15";
+        this.targetX = this.x;
+        this.targetY = this.y;
+        this.moveCooldown = 0;
+      }
+      update(dt) {
+        const moveDelay = 120;
+        this.moveCooldown -= dt;
+        if (this.moveCooldown <= 0) {
+          let moved = false;
+          if (keys["ArrowUp"] || keys["KeyW"]) {
+            this.targetY -= laneHeight;
+            moved = true;
+          } else if (keys["ArrowDown"] || keys["KeyS"]) {
+            this.targetY += laneHeight;
+            moved = true;
+          } else if (keys["ArrowLeft"] || keys["KeyA"]) {
+            this.targetX -= 40;
+            moved = true;
+          } else if (keys["ArrowRight"] || keys["KeyD"]) {
+            this.targetX += 40;
+            moved = true;
+          }
+          if (moved) {
+            this.moveCooldown = moveDelay;
+          }
+        }
+
+        this.targetX = Math.max(5, Math.min(W - this.size - 5, this.targetX));
+        this.targetY = Math.max(5, Math.min(H - this.size - 5, this.targetY));
+
+        const lerp = (a, b, t) => a + (b - a) * t;
+        this.x = lerp(this.x, this.targetX, 0.25);
+        this.y = lerp(this.y, this.targetY, 0.25);
+      }
+      draw(ctx) {
+        ctx.save();
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x, this.y, this.size, this.size);
+        ctx.fillStyle = "#fef9c3";
+        ctx.fillRect(this.x + 4, this.y + 4, 6, 6);
+        ctx.restore();
+      }
+      laneIndex() {
+        return Math.floor((this.y + this.size / 2) / laneHeight);
+      }
+    }
+
+    class Car {
+      constructor(laneIndex, direction, speed) {
+        this.laneIndex = laneIndex;
+        this.direction = direction;
+        this.speed = speed;
+        this.width = 40 + Math.random() * 20;
+        this.height = laneHeight - 16;
+        this.y = laneIndex * laneHeight + (laneHeight - this.height) / 2;
+        this.color = ["#f97316", "#22c55e", "#3b82f6", "#e11d48"][Math.floor(Math.random() * 4)];
+        if (direction > 0) {
+          this.x = -this.width - Math.random() * 120;
+        } else {
+          this.x = W + Math.random() * 120;
+        }
+      }
+      update(dt) {
+        this.x += this.speed * this.direction * (dt / 16.67);
+      }
+      offscreen() {
+        return this.x < -this.width - 50 || this.x > W + 50;
+      }
+      draw(ctx) {
+        ctx.save();
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x, this.y, this.width, this.height);
+        ctx.fillStyle = "rgba(15,23,42,0.7)";
+        ctx.fillRect(this.x + 4, this.y + 4, this.width - 8, this.height - 8);
+        ctx.restore();
+      }
+    }
+
+    function isSafeLane(index) {
+      return safeLaneIndexes.includes(index);
+    }
+
+    function spawnCars() {
+      cars = [];
+      for (let lane = 1; lane < numLanes - 1; lane++) {
+        if (isSafeLane(lane)) continue;
+        const direction = Math.random() < 0.5 ? 1 : -1;
+        const baseSpeed = 1.2 + lane * 0.25;
+        const carCount = 2 + Math.floor(Math.random() * 2);
+        for (let i = 0; i < carCount; i++) {
+          const c = new Car(lane, direction, baseSpeed * (60 + Math.random() * 40));
+          c.x += i * 120 * direction;
+          cars.push(c);
+        }
+      }
+    }
+
+    function resetGame() {
+      score = 0;
+      scoreEl.textContent = score;
+      player = new Player();
+      spawnCars();
+      lastTime = performance.now();
+    }
+
+    function rectsOverlap(a, b) {
+      return !(
+        a.x + a.size < b.x ||
+        a.x > b.x + b.width ||
+        a.y + a.size < b.y ||
+        a.y > b.y + b.height
+      );
+    }
+
+    function update(dt) {
+      player.update(dt);
+      cars.forEach(c => c.update(dt));
+      cars = cars.filter(c => !c.offscreen());
+
+      // Occasionally spawn new cars
+      if (Math.random() < 0.02) {
+        const lane = 1 + Math.floor(Math.random() * (numLanes - 2));
+        if (!isSafeLane(lane)) {
+          const direction = Math.random() < 0.5 ? 1 : -1;
+          const baseSpeed = 1.2 + lane * 0.25;
+          cars.push(new Car(lane, direction, baseSpeed * (60 + Math.random() * 40)));
+        }
+      }
+
+      // Collision
+      for (const c of cars) {
+        if (rectsOverlap(player, c)) {
+          gameOver();
+          return;
+        }
+      }
+
+      // Score based on highest lane reached
+      const lane = numLanes - 1 - player.laneIndex();
+      if (lane > score) {
+        score = lane;
+        scoreEl.textContent = score;
+        if (score > best) {
+          best = score;
+          bestEl.textContent = best;
+          localStorage.setItem("crossy_best", best);
+        }
+      }
+    }
+
+    function drawBackground() {
+      for (let i = 0; i < numLanes; i++) {
+        const y = i * laneHeight;
+        if (isSafeLane(i)) {
+          ctx.fillStyle = i === numLanes - 1 ? "#166534" : "#15803d";
+        } else {
+          ctx.fillStyle = "#111827";
+        }
+        ctx.fillRect(0, y, W, laneHeight);
+
+        if (!isSafeLane(i)) {
+          ctx.strokeStyle = "#1f2937";
+          ctx.lineWidth = 2;
+          ctx.setLineDash([10, 10]);
+          ctx.beginPath();
+          ctx.moveTo(0, y + laneHeight / 2);
+          ctx.lineTo(W, y + laneHeight / 2);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+      }
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, W, H);
+      drawBackground();
+      cars.forEach(c => c.draw(ctx));
+      player.draw(ctx);
+    }
+
+    function loop(timestamp) {
+      if (!running) return;
+      const dt = timestamp - lastTime;
+      lastTime = timestamp;
+      update(dt);
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    function startGame() {
+      overlay.style.display = "none";
+      running = true;
+      resetGame();
+      requestAnimationFrame(loop);
+    }
+
+    function gameOver() {
+      running = false;
+      overlay.style.display = "flex";
+      overlay.querySelector("h2").textContent = "Game Over";
+      overlay.querySelector("p").textContent = `Score: ${score} | Best: ${best}`;
+      startBtn.textContent = "Play Again";
+    }
+
+    window.addEventListener("keydown", e => {
+      keys[e.code] = true;
+      if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(e.code)) {
+        e.preventDefault();
+      }
+    });
+    window.addEventListener("keyup", e => {
+      keys[e.code] = false;
+    });
+
+    startBtn.addEventListener("click", () => {
+      startGame();
+    });
+    restartBtn.addEventListener("click", () => {
+      if (!running) {
+        startGame();
+      } else {
+        resetGame();
+      }
+    });
+  </script>
+</body>
+</html>
