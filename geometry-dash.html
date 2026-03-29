@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Geometry Dash Style</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #020617;
+      color: #e5e7eb;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 1rem;
+    }
+    h1 { margin-bottom: 0.25rem; font-size: 1.6rem; }
+    .subtitle {
+      font-size: 0.9rem;
+      color: #9ca3af;
+      margin-bottom: 0.75rem;
+      text-align: center;
+    }
+    #gameContainer {
+      position: relative;
+      width: 480px;
+      height: 270px;
+      background: radial-gradient(circle at top, #4f46e5, #0f172a 60%, #020617);
+      border-radius: 12px;
+      overflow: hidden;
+      border: 2px solid #1f2937;
+      box-shadow: 0 18px 40px rgba(15, 23, 42, 0.9);
+      touch-action: none;
+    }
+    #gameCanvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+    .hud {
+      margin-top: 0.5rem;
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+      font-size: 0.9rem;
+    }
+    .btn {
+      padding: 0.35rem 0.9rem;
+      border-radius: 999px;
+      border: 1px solid #38bdf8;
+      background: transparent;
+      color: #38bdf8;
+      font-size: 0.8rem;
+      cursor: pointer;
+    }
+    .btn:hover { background: rgba(56, 189, 248, 0.15); }
+    #overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.85);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: #e5e7eb;
+      text-align: center;
+      padding: 1rem;
+    }
+    #overlay h2 { margin-bottom: 0.5rem; }
+    #overlay p {
+      font-size: 0.9rem;
+      color: #9ca3af;
+      margin-bottom: 0.75rem;
+    }
+    #overlay button {
+      padding: 0.45rem 1.2rem;
+      border-radius: 999px;
+      border: none;
+      background: #38bdf8;
+      color: #020617;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    #overlay button:hover { filter: brightness(1.1); }
+    @media (max-width: 520px) {
+      #gameContainer { width: 100%; max-width: 480px; }
+    }
+  </style>
+</head>
+<body>
+  <h1>Geometry Dash Style</h1>
+  <div class="subtitle">Press SPACE / click / tap to jump. Avoid spikes and blocks. Survive as long as you can.</div>
+
+  <div id="gameContainer">
+    <canvas id="gameCanvas" width="480" height="270"></canvas>
+    <div id="overlay">
+      <h2>Geometry Dash Style</h2>
+      <p>Auto‑run. Time your jumps to clear spikes and blocks.</p>
+      <p>Controls: SPACE, click, or tap</p>
+      <button id="startBtn">Start</button>
+    </div>
+  </div>
+
+  <div class="hud">
+    <div>Distance: <span id="score">0</span> m</div>
+    <div>Best: <span id="best">0</span> m</div>
+    <button class="btn" id="restartBtn">Restart</button>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+    const overlay = document.getElementById("overlay");
+    const startBtn = document.getElementById("startBtn");
+    const restartBtn = document.getElementById("restartBtn");
+    const scoreEl = document.getElementById("score");
+    const bestEl = document.getElementById("best");
+
+    const W = canvas.width;
+    const H = canvas.height;
+
+    let player, obstacles, groundY, scrollSpeed, gravity, jumpVel;
+    let running = false;
+    let lastTime = 0;
+    let score = 0;
+    let best = parseInt(localStorage.getItem("geo_best") || "0", 10);
+    bestEl.textContent = best;
+
+    class Player {
+      constructor() {
+        this.size = 26;
+        this.x = W * 0.2;
+        this.y = 0;
+        this.vy = 0;
+        this.onGround = false;
+        this.angle = 0;
+      }
+      reset() {
+        this.y = groundY - this.size;
+        this.vy = 0;
+        this.onGround = true;
+        this.angle = 0;
+      }
+      jump() {
+        if (this.onGround) {
+          this.vy = jumpVel;
+          this.onGround = false;
+        }
+      }
+      update(dt) {
+        this.vy += gravity * (dt / 16.67);
+        this.y += this.vy * (dt / 16.67);
+
+        if (this.y + this.size >= groundY) {
+          this.y = groundY - this.size;
+          this.vy = 0;
+          this.onGround = true;
+        }
+
+        const targetAngle = this.onGround ? 0 : 0.6;
+        this.angle += (targetAngle - this.angle) * 0.2;
+      }
+      draw(ctx) {
+        ctx.save();
+        ctx.translate(this.x + this.size / 2, this.y + this.size / 2);
+        ctx.rotate(this.angle);
+        ctx.fillStyle = "#facc15";
+        ctx.beginPath();
+        ctx.roundRect(-this.size / 2, -this.size / 2, this.size, this.size, 6);
+        ctx.fill();
+        ctx.fillStyle = "#0f172a";
+        ctx.fillRect(-4, -4, 8, 8);
+        ctx.restore();
+      }
+      getBounds() {
+        return { x: this.x, y: this.y, w: this.size, h: this.size };
+      }
+    }
+
+    class Obstacle {
+      constructor(x, type) {
+        this.x = x;
+        this.type = type; // "spike" or "block"
+        if (type === "spike") {
+          this.width = 20;
+          this.height = 26;
+        } else {
+          this.width = 30;
+          this.height = 30;
+        }
+        this.y = groundY - this.height;
+      }
+      update(dt) {
+        this.x -= scrollSpeed * (dt / 16.67);
+      }
+      offscreen() {
+        return this.x + this.width < -40;
+      }
+      draw(ctx) {
+        if (this.type === "spike") {
+          ctx.fillStyle = "#ef4444";
+          ctx.beginPath();
+          ctx.moveTo(this.x, this.y + this.height);
+          ctx.lineTo(this.x + this.width / 2, this.y);
+          ctx.lineTo(this.x + this.width, this.y + this.height);
+          ctx.closePath();
+          ctx.fill();
+        } else {
+          ctx.fillStyle = "#22c55e";
+          ctx.fillRect(this.x, this.y, this.width, this.height);
+          ctx.fillStyle = "#16a34a";
+          ctx.fillRect(this.x + 4, this.y + 4, this.width - 8, this.height - 8);
+        }
+      }
+      collides(b) {
+        return !(
+          b.x + b.w < this.x ||
+          b.x > this.x + this.width ||
+          b.y + b.h < this.y ||
+          b.y > this.y + this.height
+        );
+      }
+    }
+
+    function resetGame() {
+      groundY = H - 40;
+      scrollSpeed = 4.2;
+      gravity = 0.7;
+      jumpVel = -11.5;
+
+      player = new Player();
+      player.reset();
+      obstacles = [];
+      score = 0;
+      scoreEl.textContent = score.toFixed(1);
+      lastTime = performance.now();
+
+      let x = W + 200;
+      for (let i = 0; i < 6; i++) {
+        x += 120 + Math.random() * 80;
+        obstacles.push(new Obstacle(x, Math.random() < 0.6 ? "spike" : "block"));
+      }
+    }
+
+    function spawnObstacles() {
+      if (!obstacles.length) return;
+      const last = obstacles[obstacles.length - 1];
+      if (last.x < W + 80) {
+        let x = last.x + 120 + Math.random() * 80;
+        const type = Math.random() < 0.6 ? "spike" : "block";
+        obstacles.push(new Obstacle(x, type));
+      }
+    }
+
+    function drawBackground() {
+      const grd = ctx.createLinearGradient(0, 0, 0, H);
+      grd.addColorStop(0, "#4f46e5");
+      grd.addColorStop(0.5, "#1e293b");
+      grd.addColorStop(1, "#020617");
+      ctx.fillStyle = grd;
+      ctx.fillRect(0, 0, W, H);
+
+      ctx.fillStyle = "#0f172a";
+      ctx.fillRect(0, groundY, W, H - groundY);
+      ctx.fillStyle = "#1f2937";
+      for (let i = 0; i < W; i += 24) {
+        ctx.fillRect(i, groundY, 12, H - groundY);
+      }
+
+      ctx.strokeStyle = "rgba(148,163,184,0.25)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let x = 0; x < W; x += 40) {
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x + 40, H);
+      }
+      ctx.stroke();
+    }
+
+    function update(dt) {
+      player.update(dt);
+      obstacles.forEach(o => o.update(dt));
+      obstacles = obstacles.filter(o => !o.offscreen());
+      spawnObstacles();
+
+      const b = player.getBounds();
+      for (const o of obstacles) {
+        if (o.collides(b)) {
+          gameOver();
+          return;
+        }
+      }
+
+      score += (scrollSpeed * dt) / 1000;
+      scoreEl.textContent = score.toFixed(1);
+      if (score > best) {
+        best = score;
+        bestEl.textContent = best.toFixed(1);
+        localStorage.setItem("geo_best", best);
+      }
+
+      scrollSpeed += 0.0008 * dt;
+    }
+
+    function draw() {
+      drawBackground();
+      obstacles.forEach(o => o.draw(ctx));
+      player.draw(ctx);
+    }
+
+    function loop(timestamp) {
+      if (!running) return;
+      const dt = timestamp - lastTime;
+      lastTime = timestamp;
+      update(dt);
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    function startGame() {
+      overlay.style.display = "none";
+      running = true;
+      resetGame();
+      requestAnimationFrame(loop);
+    }
+
+    function gameOver() {
+      running = false;
+      overlay.style.display = "flex";
+      overlay.querySelector("h2").textContent = "Game Over";
+      overlay.querySelector("p").textContent =
+        `Distance: ${score.toFixed(1)} m | Best: ${best.toFixed(1)} m`;
+      startBtn.textContent = "Play Again";
+    }
+
+    function jump() {
+      if (!running) return;
+      player.jump();
+    }
+
+    window.addEventListener("keydown", e => {
+      if (e.code === "Space" || e.code === "ArrowUp") {
+        e.preventDefault();
+        if (!running && overlay.style.display !== "none") {
+          startGame();
+        } else {
+          jump();
+        }
+      }
+    });
+
+    canvas.addEventListener("pointerdown", () => {
+      if (!running && overlay.style.display !== "none") {
+        startGame();
+      } else {
+        jump();
+      }
+    });
+
+    startBtn.addEventListener("click", startGame);
+    restartBtn.addEventListener("click", () => {
+      if (!running) startGame();
+      else resetGame();
+    });
+  </script>
+</body>
+</html>
